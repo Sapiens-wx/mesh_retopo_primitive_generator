@@ -137,9 +137,8 @@ def create_cylinder(rng: random.Random, bounds: PrimitiveBounds) -> tuple["bpy.t
     vertices = _randint(rng, *bounds.cylinder_vertices_range)
     radius = _uniform(rng, *bounds.cylinder_radius_range)
     depth = _uniform(rng, *bounds.cylinder_depth_range)
-    # Both fill types remain quad-safe once Catmull-Clark subdivision is
-    # applied afterwards (an n-gon or triangle fan cap becomes a fan of
-    # quads meeting at the cap center).
+    # Both fill types become quad-only during flat face subdivision (an n-gon
+    # or triangle fan produces quads using shared edge midpoints and centers).
     cap_fill_type = rng.choice(("NGON", "TRIFAN"))
 
     bpy.ops.mesh.primitive_cylinder_add(
@@ -196,6 +195,21 @@ def create_monkey(rng: random.Random, bounds: PrimitiveBounds) -> tuple["bpy.typ
 
     bpy.ops.mesh.primitive_monkey_add(location=(0.0, 0.0, 0.0))
     obj = _active_object()
+
+    # Stock Suzanne has open eye-socket boundary loops. Close them before
+    # face subdivision so the documented closed-family invariant is
+    # achievable; the resulting n-gons are converted to flat quads later.
+    mesh = obj.data
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+    boundary_edges = [edge for edge in bm.edges if len(edge.link_faces) == 1]
+    closed_boundary_edges = len(boundary_edges)
+    if boundary_edges:
+        bmesh.ops.holes_fill(bm, edges=boundary_edges, sides=0)
+    bm.to_mesh(mesh)
+    bm.free()
+    mesh.update()
+
     bpy.context.view_layer.objects.active = obj
     obj.select_set(True)
     obj.scale = (scale_factor, scale_factor, scale_factor)
@@ -203,7 +217,11 @@ def create_monkey(rng: random.Random, bounds: PrimitiveBounds) -> tuple["bpy.typ
     if use_smooth:
         bpy.ops.object.shade_smooth()
     normalize_object_origin(obj)
-    params = {"scale": scale_factor, "shade_smooth": use_smooth}
+    params = {
+        "scale": scale_factor,
+        "shade_smooth": use_smooth,
+        "closed_boundary_edges": closed_boundary_edges,
+    }
     return obj, params
 
 

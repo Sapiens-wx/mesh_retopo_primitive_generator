@@ -32,7 +32,7 @@ modifiers, units, or FBX export behavior.
 | `--primitives` | all | Comma-separated subset of `cube,sphere,torus,cylinder,monkey,cone,plane`. |
 | `--seed` | `0` | Root seed for deterministic generation. |
 | `--start-index` | `0` | First index per primitive family. |
-| `--subdivision-min` / `--subdivision-max` | `1` / `3` | Applied Catmull-Clark subdivision range. |
+| `--subdivision-min` / `--subdivision-max` | `1` / `3` | Flat per-face subdivision range; no smoothing modifier is used. |
 | `--max-attempts` | `20` | Retry attempts per requested sample. |
 | `--filename` | `clean.fbx` | Exported mesh filename (keep default for Stage 2). |
 | `--overwrite` | off | Replace an existing sample directory (mutually exclusive with `--resume`). |

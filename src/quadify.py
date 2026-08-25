@@ -1,15 +1,13 @@
 """Conversion to, and low-level checks of, strict quad topology.
 
 This module implements architecture.md section 9 (Quad Topology Strategy):
-Catmull-Clark subdivision is the only mechanism used to convert triangles or
-n-gons into quads. Nothing here triangulates or heuristically merges
-triangle pairs into quads.
+every source face is subdivided into quads using edge midpoints and a face
+center. Existing vertex positions are never smoothed.
 """
 
 from __future__ import annotations
 
 import bmesh
-import bpy
 
 
 def mesh_is_all_quads(mesh: "bpy.types.Mesh") -> bool:
@@ -26,8 +24,7 @@ def resolve_subdivision_level(obj: "bpy.types.Object", requested_level: int) -> 
     Subdivision level 0 is only valid when the intermediate mesh already
     passes strict quad validation (architecture.md section 9). Any other
     intermediate mesh is forced to at least level 1 regardless of what was
-    sampled, since Catmull-Clark subdivision is the only quadification
-    mechanism used.
+    sampled so every output face is a quad.
     """
 
     if requested_level > 0:
@@ -37,23 +34,92 @@ def resolve_subdivision_level(obj: "bpy.types.Object", requested_level: int) -> 
     return 1
 
 
-def apply_subdivision(obj: "bpy.types.Object", level: int) -> None:
-    """Add and immediately apply a Catmull-Clark subdivision modifier."""
+def subdivide_faces_to_quads(obj: "bpy.types.Object", level: int) -> None:
+    """Subdivide every face into flat quads without a smoothing modifier.
 
-    if level <= 0:
-        return
+    Each original edge receives one shared midpoint. Each face receives one
+    center vertex and produces one quad per original corner:
 
-    view_layer = bpy.context.view_layer
-    view_layer.objects.active = obj
-    for other in bpy.context.selected_objects:
-        other.select_set(False)
-    obj.select_set(True)
+    ``corner -> next edge midpoint -> face center -> previous edge midpoint``.
 
-    modifier = obj.modifiers.new(name="quadify_subsurf", type="SUBSURF")
-    modifier.subdivision_type = "CATMULL_CLARK"
-    modifier.levels = level
-    modifier.render_levels = level
-    bpy.ops.object.modifier_apply(modifier=modifier.name)
+    This is the topology-only equivalent of subdividing selected faces in
+    Edit Mode. Original vertices remain fixed, edge points are exact
+    midpoints, and face points are arithmetic centers, so surfaces do not
+    acquire Catmull-Clark smoothing.
+    """
+
+    mesh = obj.data
+    for _ in range(max(0, level)):
+        coordinates = [tuple(vertex.co) for vertex in mesh.vertices]
+        edge_midpoints: dict[tuple[int, int], int] = {}
+        quad_faces: list[tuple[int, int, int, int]] = []
+        smooth_flags: list[bool] = []
+
+        def midpoint_index(first: int, second: int) -> int:
+            key = (first, second) if first < second else (second, first)
+            existing = edge_midpoints.get(key)
+            if existing is not None:
+                return existing
+
+            a = coordinates[first]
+            b = coordinates[second]
+            index = len(coordinates)
+            coordinates.append(
+                (
+                    (a[0] + b[0]) * 0.5,
+                    (a[1] + b[1]) * 0.5,
+                    (a[2] + b[2]) * 0.5,
+                )
+            )
+            edge_midpoints[key] = index
+            return index
+
+        for polygon in mesh.polygons:
+            vertices = list(polygon.vertices)
+            if len(vertices) < 3:
+                raise RuntimeError(
+                    f"cannot subdivide face with {len(vertices)} vertices"
+                )
+            if len(vertices) == 3:
+                # skip triangles
+                continue
+
+            center = [0.0, 0.0, 0.0]
+            for vertex_index in vertices:
+                coordinate = coordinates[vertex_index]
+                center[0] += coordinate[0]
+                center[1] += coordinate[1]
+                center[2] += coordinate[2]
+            inverse_count = 1.0 / len(vertices)
+            center_index = len(coordinates)
+            coordinates.append(
+                (
+                    center[0] * inverse_count,
+                    center[1] * inverse_count,
+                    center[2] * inverse_count,
+                )
+            )
+
+            for corner, vertex_index in enumerate(vertices):
+                previous_vertex = vertices[corner - 1]
+                next_vertex = vertices[(corner + 1) % len(vertices)]
+                previous_midpoint = midpoint_index(previous_vertex, vertex_index)
+                next_midpoint = midpoint_index(vertex_index, next_vertex)
+                quad_faces.append(
+                    (
+                        vertex_index,
+                        next_midpoint,
+                        center_index,
+                        previous_midpoint,
+                    )
+                )
+                smooth_flags.append(polygon.use_smooth)
+
+        mesh.clear_geometry()
+        mesh.from_pydata(coordinates, [], quad_faces)
+        for polygon, use_smooth in zip(mesh.polygons, smooth_flags):
+            polygon.use_smooth = use_smooth
+        mesh.update(calc_edges=True)
 
 
 def merge_by_distance(obj: "bpy.types.Object", bbox_diagonal: float, relative_tolerance: float) -> int:

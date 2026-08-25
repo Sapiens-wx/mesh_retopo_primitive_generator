@@ -27,7 +27,7 @@ CLOSED_PRIMITIVES: frozenset[str] = frozenset(
 )
 
 #: Primitive families that Blender may create with triangles or n-gons and
-#: therefore require at least one Catmull-Clark subdivision level to become
+#: therefore require at least one flat face-subdivision level to become
 #: strictly quad-only. Kept for documentation; the generator also performs a
 #: runtime check of the intermediate mesh rather than trusting this list
 #: blindly (e.g. a beveled cube also needs forced subdivision).
@@ -173,7 +173,7 @@ def validate_config(config: GenerationConfig) -> None:
     if config.subdivision_max > 6:
         raise ConfigError(
             "--subdivision-max above 6 is rejected: polygon counts grow "
-            "exponentially with Catmull-Clark subdivision level"
+            "exponentially with each face-subdivision level"
         )
 
     if config.max_attempts <= 0:

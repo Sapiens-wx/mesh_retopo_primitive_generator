@@ -89,8 +89,8 @@ before the next sample begins.
 | `--primitives` | comma-separated names | all | Subset of `cube,sphere,torus,cylinder,monkey,cone,plane`. |
 | `--seed` | integer | `0` | Root random seed for reproducible generation. |
 | `--start-index` | non-negative integer | `0` | First index generated for each primitive family. |
-| `--subdivision-min` | integer | `1` | Minimum applied Catmull-Clark subdivision level. |
-| `--subdivision-max` | integer | `3` | Maximum applied Catmull-Clark subdivision level. |
+| `--subdivision-min` | integer | `1` | Minimum flat per-face subdivision level. |
+| `--subdivision-max` | integer | `3` | Maximum flat per-face subdivision level. |
 | `--max-attempts` | positive integer | `20` | Candidate attempts allowed for each requested sample. |
 | `--filename` | string | `clean.fbx` | Exported mesh filename. Use `clean.fbx` for Stage 2 compatibility. |
 
@@ -264,9 +264,9 @@ therefore uses the following sequence:
 
 1. Create the intermediate primitive.
 2. Apply primitive-specific cap or tip construction where needed.
-3. Apply at least one Catmull-Clark subdivision level when the source contains
-   triangles or n-gons; applied subdivision converts source polygons into
-   quads.
+3. Subdivide every source face into quads using shared edge midpoints and an
+   arithmetic face center. This changes topology without smoothing or moving
+   existing vertices.
 4. Apply optional topology-safe geometric variations.
 5. Apply all remaining modifiers.
 6. Remove duplicate vertices within a small, scale-relative tolerance.
@@ -276,7 +276,7 @@ therefore uses the following sequence:
 Subdivision level zero may only be accepted if the intermediate mesh already
 passes strict quad validation. The default minimum is one because sphere,
 cylinder, cone, and monkey source meshes cannot otherwise be assumed to be
-quad-only.
+quad-only. No Subdivision Surface modifier is created or applied.
 
 Do not triangulate during generation or FBX export. Do not treat two adjacent
 triangles as a quad unless they are explicitly dissolved into one valid

@@ -242,7 +242,7 @@ def generate_sample(
 
             requested_level = rng.randint(config.subdivision_min, config.subdivision_max)
             subdivision_level = quadify.resolve_subdivision_level(obj, requested_level)
-            quadify.apply_subdivision(obj, subdivision_level)
+            quadify.subdivide_faces_to_quads(obj, subdivision_level)
 
             variation_params = variations.sample_variation_params(rng, config.deformation_bounds)
             variations.apply_scale_and_rotation(obj, variation_params)
