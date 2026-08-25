@@ -2,7 +2,7 @@
 
 Blender `bpy`/`bmesh` background-mode tool that generates a validated,
 strictly quad-topology dataset of primitive meshes (cube, sphere, torus,
-cylinder, monkey, cone, plane) and exports each accepted sample as
+cylinder, monkey, plane) and exports each accepted sample as
 `clean.fbx`. See `architecture.md` for the full design.
 
 ## Prerequisites
@@ -29,7 +29,7 @@ modifiers, units, or FBX export behavior.
 |---|---|---|
 | `-o`, `--output` | *(required)* | Dataset output root; created if absent. |
 | `--samples-per-primitive` | `100` | Accepted samples per enabled family. |
-| `--primitives` | all | Comma-separated subset of `cube,sphere,torus,cylinder,monkey,cone,plane`. |
+| `--primitives` | all | Comma-separated subset of `cube,sphere,torus,cylinder,monkey,plane`. |
 | `--seed` | `0` | Root seed for deterministic generation. |
 | `--start-index` | `0` | First index per primitive family. |
 | `--subdivision-min` / `--subdivision-max` | `1` / `3` | Flat per-face subdivision range; no smoothing modifier is used. |

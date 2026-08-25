@@ -86,7 +86,7 @@ before the next sample begins.
 | Argument | Type | Default | Description |
 |---|---:|---:|---|
 | `--samples-per-primitive` | positive integer | `100` | Number of accepted samples per enabled primitive family. |
-| `--primitives` | comma-separated names | all | Subset of `cube,sphere,torus,cylinder,monkey,cone,plane`. |
+| `--primitives` | comma-separated names | all | Subset of `cube,sphere,torus,cylinder,monkey,plane`. |
 | `--seed` | integer | `0` | Root random seed for reproducible generation. |
 | `--start-index` | non-negative integer | `0` | First index generated for each primitive family. |
 | `--subdivision-min` | integer | `1` | Minimum flat per-face subdivision level. |
@@ -275,7 +275,7 @@ therefore uses the following sequence:
 
 Subdivision level zero may only be accepted if the intermediate mesh already
 passes strict quad validation. The default minimum is one because sphere,
-cylinder, cone, and monkey source meshes cannot otherwise be assumed to be
+cylinder, and monkey source meshes cannot otherwise be assumed to be
 quad-only. No Subdivision Surface modifier is created or applied.
 
 Do not triangulate during generation or FBX export. Do not treat two adjacent
@@ -298,7 +298,7 @@ A candidate is accepted only if all of the following are true:
 - the bounding-box diagonal is finite and non-zero
 - polygon count is below the configured safety limit
 
-Closed families (`cube`, `sphere`, `torus`, `cylinder`, `monkey`, and `cone`)
+Closed families (`cube`, `sphere`, `torus`, `cylinder`, and `monkey`)
 must also be manifold and watertight. `plane` is intentionally open, but each
 boundary edge must belong to exactly one face and each interior edge to exactly
 two faces.

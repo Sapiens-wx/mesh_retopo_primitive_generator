@@ -159,33 +159,6 @@ def create_cylinder(rng: random.Random, bounds: PrimitiveBounds) -> tuple["bpy.t
     return obj, params
 
 
-def create_cone(rng: random.Random, bounds: PrimitiveBounds) -> tuple["bpy.types.Object", dict[str, Any]]:
-    vertices = _randint(rng, *bounds.cone_vertices_range)
-    radius1 = _uniform(rng, *bounds.cone_radius1_range)
-    radius2 = _uniform(rng, *bounds.cone_radius2_range)
-    depth = _uniform(rng, *bounds.cone_depth_range)
-    cap_fill_type = rng.choice(("NGON", "TRIFAN"))
-
-    bpy.ops.mesh.primitive_cone_add(
-        vertices=vertices,
-        radius1=radius1,
-        radius2=radius2,
-        depth=depth,
-        end_fill_type=cap_fill_type,
-        location=(0.0, 0.0, 0.0),
-    )
-    obj = _active_object()
-    normalize_object_origin(obj)
-    params = {
-        "vertices": vertices,
-        "radius1": radius1,
-        "radius2": radius2,
-        "depth": depth,
-        "cap_fill_type": cap_fill_type,
-    }
-    return obj, params
-
-
 def create_monkey(rng: random.Random, bounds: PrimitiveBounds) -> tuple["bpy.types.Object", dict[str, Any]]:
     # bpy's primitive_monkey_add has no radius/size argument; overall scale
     # is realized as a uniform object-scale creation parameter here (kept
@@ -260,7 +233,6 @@ PRIMITIVE_CREATORS: dict[
     "torus": create_torus,
     "cylinder": create_cylinder,
     "monkey": create_monkey,
-    "cone": create_cone,
     "plane": create_plane,
 }
 

@@ -17,13 +17,12 @@ ALL_PRIMITIVES: tuple[str, ...] = (
     "torus",
     "cylinder",
     "monkey",
-    "cone",
     "plane",
 )
 
 #: Closed primitive families that must pass manifold/watertight validation.
 CLOSED_PRIMITIVES: frozenset[str] = frozenset(
-    {"cube", "sphere", "torus", "cylinder", "monkey", "cone"}
+    {"cube", "sphere", "torus", "cylinder", "monkey"}
 )
 
 #: Primitive families that Blender may create with triangles or n-gons and
@@ -32,7 +31,7 @@ CLOSED_PRIMITIVES: frozenset[str] = frozenset(
 #: runtime check of the intermediate mesh rather than trusting this list
 #: blindly (e.g. a beveled cube also needs forced subdivision).
 NON_QUAD_NATIVE_PRIMITIVES: frozenset[str] = frozenset(
-    {"sphere", "cylinder", "cone", "monkey"}
+    {"sphere", "cylinder", "monkey"}
 )
 
 SCHEMA_VERSION = 1
@@ -87,11 +86,6 @@ class PrimitiveBounds:
     cylinder_vertices_range: tuple[int, int] = (8, 32)
     cylinder_radius_range: tuple[float, float] = (0.4, 1.2)
     cylinder_depth_range: tuple[float, float] = (0.8, 2.4)
-    # cone
-    cone_vertices_range: tuple[int, int] = (8, 32)
-    cone_radius1_range: tuple[float, float] = (0.5, 1.3)
-    cone_radius2_range: tuple[float, float] = (0.0, 0.4)
-    cone_depth_range: tuple[float, float] = (0.8, 2.4)
     # cube
     cube_size_range: tuple[float, float] = (1.0, 2.0)
     cube_bevel_width_range: tuple[float, float] = (0.0, 0.12)
@@ -202,7 +196,6 @@ def validate_config(config: GenerationConfig) -> None:
     _validate_range(bounds.torus_major_segments_range, "torus_major_segments_range", minimum=3)
     _validate_range(bounds.torus_minor_segments_range, "torus_minor_segments_range", minimum=3)
     _validate_range(bounds.cylinder_vertices_range, "cylinder_vertices_range", minimum=3)
-    _validate_range(bounds.cone_vertices_range, "cone_vertices_range", minimum=3)
     _validate_range(bounds.plane_subdivisions_range, "plane_subdivisions_range", minimum=2)
     _validate_range(bounds.cube_bevel_segments_range, "cube_bevel_segments_range", minimum=0)
 
