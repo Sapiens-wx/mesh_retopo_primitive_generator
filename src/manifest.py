@@ -1,8 +1,7 @@
 """Run and per-sample metadata serialization.
 
-Handles ``metadata.json`` (per sample), ``manifest.json`` (per run),
-``run.log`` (human-readable progress), and ``errors.jsonl`` (machine-readable
-failures) as described in architecture.md sections 6 and 14.
+Handles ``metadata.json`` (per sample), ``manifest.json`` (per run), and the
+minimal per-sample status output in ``run.log``.
 """
 
 from __future__ import annotations
@@ -84,7 +83,7 @@ def setup_logging(run_log_path: Path) -> logging.Logger:
     logger.handlers.clear()
     logger.propagate = False
 
-    formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+    formatter = logging.Formatter("%(message)s")
 
     stream_handler = logging.StreamHandler(stream=sys.stdout)
     stream_handler.setFormatter(formatter)
@@ -95,12 +94,6 @@ def setup_logging(run_log_path: Path) -> logging.Logger:
     logger.addHandler(file_handler)
 
     return logger
-
-
-def append_error(errors_path: Path, entry: dict[str, Any]) -> None:
-    with open(errors_path, "a", encoding="utf-8") as handle:
-        handle.write(json.dumps(entry, sort_keys=True, ensure_ascii=False) + "\n")
-
 
 @dataclass
 class ManifestWriter:

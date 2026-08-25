@@ -14,6 +14,8 @@ from pathlib import Path
 
 import bpy
 
+from quiet import suppress_output
+
 
 def temp_sample_dir(output_root: Path, sample_id: str) -> Path:
     return output_root / f".{sample_id}.tmp-{os.getpid()}"
@@ -46,23 +48,24 @@ def export_fbx(obj: "bpy.types.Object", filepath: Path) -> None:
     obj.select_set(True)
     bpy.context.view_layer.objects.active = obj
 
-    bpy.ops.export_scene.fbx(
-        filepath=str(filepath),
-        use_selection=True,
-        object_types={"MESH"},
-        bake_anim=False,
-        add_leaf_bones=False,
-        axis_forward="-Y",
-        axis_up="Z",
-        global_scale=1.0,
-        apply_unit_scale=True,
-        apply_scale_options="FBX_SCALE_ALL",
-        use_mesh_modifiers=True,
-        mesh_smooth_type="OFF",
-        use_triangles=False,
-        embed_textures=False,
-        path_mode="AUTO",
-    )
+    with suppress_output():
+        bpy.ops.export_scene.fbx(
+            filepath=str(filepath),
+            use_selection=True,
+            object_types={"MESH"},
+            bake_anim=False,
+            add_leaf_bones=False,
+            axis_forward="-Y",
+            axis_up="Z",
+            global_scale=1.0,
+            apply_unit_scale=True,
+            apply_scale_options="FBX_SCALE_ALL",
+            use_mesh_modifiers=True,
+            mesh_smooth_type="OFF",
+            use_triangles=False,
+            embed_textures=False,
+            path_mode="AUTO",
+        )
 
 
 def finalize_sample_dir(

@@ -128,8 +128,7 @@ primitive_clean/                         # --output
 │   ├── clean.fbx
 │   └── metadata.json
 ├── manifest.json
-├── run.log
-└── errors.jsonl
+└── run.log
 ```
 
 Sample directory names are `<primitive>_<index>`, where `index` is zero-padded
@@ -373,18 +372,10 @@ presenting incomplete samples as valid data.
 
 ## 14. Logging and Error Handling
 
-Human-readable progress is written to stdout and `run.log`. Each message
-includes the primitive, index, attempt, and status.
-
-Machine-readable failures are appended to `errors.jsonl` with:
-
-- timestamp
-- sample ID
-- candidate seed
-- attempt number
-- phase (`create`, `quadify`, `validate`, `export`, or `verify`)
-- exception type and message
-- traceback
+Status is written to stdout and `run.log`. There is exactly one line per
+requested primitive index: `<sample_id>: succeeded` or
+`<sample_id>: failed: <error>`. Individual retries and run-level progress are
+not logged.
 
 Errors must not be converted into success-shaped empty samples. Invalid CLI
 configuration and output-root safety failures are fatal. Candidate-specific

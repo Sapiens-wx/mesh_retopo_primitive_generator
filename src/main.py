@@ -17,7 +17,6 @@ import datetime
 import random
 import shutil
 import sys
-import traceback
 from pathlib import Path
 
 # Allow "import config", "import primitives", etc. as plain top-level modules
@@ -32,6 +31,7 @@ import bpy  # noqa: E402  (must follow sys.path setup for local imports below)
 import exporter  # noqa: E402
 import primitives  # noqa: E402
 import quadify  # noqa: E402
+from quiet import suppress_output  # noqa: E402
 import validation  # noqa: E402
 import variations  # noqa: E402
 from config import (  # noqa: E402
@@ -47,7 +47,6 @@ from config import (  # noqa: E402
 )
 from manifest import (  # noqa: E402
     ManifestWriter,
-    append_error,
     build_sample_metadata,
     sample_is_complete_for_resume,
     setup_logging,
@@ -146,14 +145,17 @@ def ensure_output_root(config: GenerationConfig) -> Path:
 def reset_scene() -> None:
     """Clear all objects and purge orphaned datablocks (section 12)."""
 
-    if bpy.context.selected_objects or bpy.context.scene.objects:
-        bpy.ops.object.select_all(action="SELECT")
-        bpy.ops.object.delete(use_global=False)
-    for _ in range(3):
-        try:
-            bpy.ops.outliner.orphans_purge(do_local_ids=True, do_linked_ids=True, do_recursive=True)
-        except Exception:
-            break
+    with suppress_output():
+        if bpy.context.selected_objects or bpy.context.scene.objects:
+            bpy.ops.object.select_all(action="SELECT")
+            bpy.ops.object.delete(use_global=False)
+        for _ in range(3):
+            try:
+                bpy.ops.outliner.orphans_purge(
+                    do_local_ids=True, do_linked_ids=True, do_recursive=True
+                )
+            except Exception:
+                break
 
 
 def apply_all_modifiers_and_transform(obj: "bpy.types.Object") -> None:
@@ -173,7 +175,8 @@ def save_failed_snapshot(output_root: Path, sample_id: str, attempt: int) -> Non
     failed_dir.mkdir(parents=True, exist_ok=True)
     path = failed_dir / f"{sample_id}_attempt{attempt:02d}.blend"
     try:
-        bpy.ops.wm.save_as_mainfile(filepath=str(path), copy=True)
+        with suppress_output():
+            bpy.ops.wm.save_as_mainfile(filepath=str(path), copy=True)
     except Exception:
         pass
 
@@ -184,7 +187,8 @@ def verify_exported_fbx(filepath: Path, primitive: str, max_polygon_count: int) 
 
     reset_scene()
     try:
-        bpy.ops.import_scene.fbx(filepath=str(filepath))
+        with suppress_output():
+            bpy.ops.import_scene.fbx(filepath=str(filepath))
         mesh_objects = [o for o in bpy.context.scene.objects if o.type == "MESH"]
         if len(mesh_objects) != 1:
             raise RuntimeError(f"re-imported FBX has {len(mesh_objects)} mesh objects, expected 1")
@@ -212,13 +216,12 @@ def generate_sample(
     config: GenerationConfig,
     output_root: Path,
     logger,
-    errors_path: Path,
 ) -> str:
     sample_id = sample_id_for(primitive, index)
     final_dir = output_root / sample_id
 
     if config.resume and sample_is_complete_for_resume(final_dir, sample_id, config.filename):
-        logger.info(f"{sample_id}: already valid, skipping (resume)")
+        logger.info(f"{sample_id}: succeeded")
         return sample_id
 
     # Remove any stale temp directories left behind by a previous crashed
@@ -231,14 +234,12 @@ def generate_sample(
     for attempt in range(1, config.max_attempts + 1):
         seed = derive_seed(config.seed, primitive, index, attempt)
         rng = random.Random(seed)
-        phase = "create"
         temp_dir = exporter.temp_sample_dir(output_root, sample_id)
         try:
             reset_scene()
 
             obj, creation_params = primitives.create_primitive(primitive, rng, config.primitive_bounds)
 
-            phase = "quadify"
             requested_level = rng.randint(config.subdivision_min, config.subdivision_max)
             subdivision_level = quadify.resolve_subdivision_level(obj, requested_level)
             quadify.apply_subdivision(obj, subdivision_level)
@@ -257,7 +258,6 @@ def generate_sample(
             final_diagonal = variations.bbox_diagonal(obj)
             quadify.finalize_topology(obj, final_diagonal, MERGE_DISTANCE_RELATIVE)
 
-            phase = "validate"
             scene_result = validation.validate_single_mesh_scene()
             if not scene_result.ok:
                 raise RuntimeError(scene_result.reason)
@@ -270,7 +270,6 @@ def generate_sample(
             if not mesh_result.ok:
                 raise RuntimeError(mesh_result.reason)
 
-            phase = "export"
             exporter.prepare_temp_dir(temp_dir)
             fbx_path = temp_dir / config.filename
             exporter.export_fbx(obj, fbx_path)
@@ -291,7 +290,6 @@ def generate_sample(
             )
             write_json(temp_dir / "metadata.json", metadata)
 
-            phase = "verify"
             verify_exported_fbx(fbx_path, primitive, config.max_polygon_count)
 
             exporter.finalize_sample_dir(
@@ -299,31 +297,19 @@ def generate_sample(
                 final_dir,
                 replace_existing=config.overwrite or config.resume,
             )
-            logger.info(f"{sample_id}: accepted attempt={attempt} seed={seed}")
+            logger.info(f"{sample_id}: succeeded")
             return sample_id
 
         except Exception as exc:  # noqa: BLE001 - candidate failures are retried
             last_reason = str(exc)
-            logger.warning(f"{sample_id}: attempt={attempt} phase={phase} failed: {exc}")
-            append_error(
-                errors_path,
-                {
-                    "timestamp": _utc_now_iso(),
-                    "sample_id": sample_id,
-                    "seed": seed,
-                    "attempt": attempt,
-                    "phase": phase,
-                    "exception_type": type(exc).__name__,
-                    "exception_message": str(exc),
-                    "traceback": traceback.format_exc(),
-                },
-            )
             if config.keep_failed:
                 save_failed_snapshot(output_root, sample_id, attempt)
             exporter.cleanup_temp_dir(temp_dir)
             reset_scene()
 
-    raise SampleGenerationFailed(f"{sample_id}: exhausted {config.max_attempts} attempts ({last_reason})")
+    raise SampleGenerationFailed(
+        f"exhausted {config.max_attempts} attempts ({last_reason})"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -334,12 +320,6 @@ def generate_sample(
 def run(config: GenerationConfig) -> int:
     output_root = ensure_output_root(config)
     logger = setup_logging(output_root / "run.log")
-    errors_path = output_root / "errors.jsonl"
-
-    logger.info(
-        f"starting run: primitives={list(config.primitives)} "
-        f"samples_per_primitive={config.samples_per_primitive} seed={config.seed}"
-    )
 
     manifest = ManifestWriter(
         output_root=output_root,
@@ -355,24 +335,22 @@ def run(config: GenerationConfig) -> int:
             for offset in range(config.samples_per_primitive):
                 index = config.start_index + offset
                 try:
-                    sample_id = generate_sample(primitive, index, config, output_root, logger, errors_path)
+                    sample_id = generate_sample(
+                        primitive, index, config, output_root, logger
+                    )
                     manifest.record_accepted(sample_id)
                 except SampleGenerationFailed as exc:
-                    logger.error(str(exc))
+                    logger.error(f"{sample_id_for(primitive, index)}: failed: {exc}")
                     manifest.record_failed()
                     any_missing = True
                     if config.fail_fast:
-                        logger.error("--fail-fast: stopping run after first rejected/failed sample")
                         raise FailFastStop() from exc
     except FailFastStop:
         pass
     except Exception as exc:  # noqa: BLE001 - fatal, non-retryable runtime error
         fatal_error = exc
-        logger.error(f"fatal error: {exc}\n{traceback.format_exc()}")
     finally:
         manifest.write(end_time_iso=_utc_now_iso())
-
-    logger.info(f"run complete: accepted={manifest.accepted_count} failed={manifest.failed_count}")
 
     if fatal_error is not None:
         return 1

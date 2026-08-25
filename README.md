@@ -54,13 +54,16 @@ primitive_clean/
 │   ├── clean.fbx
 │   └── metadata.json
 ├── manifest.json
-├── run.log
-└── errors.jsonl
+└── run.log
 ```
 
 Every exported mesh contains exactly one object named `mesh`, with only
 non-degenerate quad faces, finite/no-loose geometry, and (except for the
 intentionally open `plane` family) manifold/watertight topology.
+
+`run.log` contains one line per requested primitive index: either
+`<sample_id>: succeeded` or `<sample_id>: failed: <error>`.
+Blender operator and FBX import/export diagnostics are suppressed.
 
 ## Feeding Stage 2 (Animation_Mesh_Pipeline)
 
