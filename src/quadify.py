@@ -1,9 +1,9 @@
 """Conversion to, and low-level checks of, primarily quad topology.
 
 This module implements architecture.md section 9 (Quad Topology Strategy):
-non-triangular source faces are subdivided into quads using edge midpoints and
-a face center. Triangles are preserved, and existing vertex positions are
-never smoothed.
+face components without triangles are subdivided into quads using edge
+midpoints and a face center. Components containing triangles are preserved
+to avoid T-junctions, and existing vertex positions are never smoothed.
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ def resolve_subdivision_level(obj: "bpy.types.Object", requested_level: int) -> 
 
 
 def subdivide_faces_to_quads(obj: "bpy.types.Object", level: int) -> None:
-    """Subdivide non-triangular faces into flat quads without smoothing.
+    """Subdivide triangle-free face components into quads without smoothing.
 
     Each original edge receives one shared midpoint. Each face receives one
     center vertex and produces one quad per original corner:
@@ -46,12 +46,47 @@ def subdivide_faces_to_quads(obj: "bpy.types.Object", level: int) -> None:
     This is the topology-only equivalent of subdividing selected faces in
     Edit Mode. Original vertices remain fixed, edge points are exact
     midpoints, and face points are arithmetic centers, so surfaces do not
-    acquire Catmull-Clark smoothing. Triangular faces pass through unchanged.
+    acquire Catmull-Clark smoothing. A connected component containing a
+    triangle passes through unchanged because subdividing an adjacent face
+    would split their shared edge and create a T-junction.
     """
 
     mesh = obj.data
     for _ in range(max(0, level)):
         coordinates = [tuple(vertex.co) for vertex in mesh.vertices]
+        polygon_vertices = [tuple(polygon.vertices) for polygon in mesh.polygons]
+        faces_by_edge: dict[tuple[int, int], list[int]] = {}
+        for face_index, vertices in enumerate(polygon_vertices):
+            for corner, vertex_index in enumerate(vertices):
+                next_vertex = vertices[(corner + 1) % len(vertices)]
+                edge = (
+                    (vertex_index, next_vertex)
+                    if vertex_index < next_vertex
+                    else (next_vertex, vertex_index)
+                )
+                faces_by_edge.setdefault(edge, []).append(face_index)
+
+        preserved_faces = {
+            face_index
+            for face_index, vertices in enumerate(polygon_vertices)
+            if len(vertices) == 3
+        }
+        pending_faces = list(preserved_faces)
+        while pending_faces:
+            face_index = pending_faces.pop()
+            vertices = polygon_vertices[face_index]
+            for corner, vertex_index in enumerate(vertices):
+                next_vertex = vertices[(corner + 1) % len(vertices)]
+                edge = (
+                    (vertex_index, next_vertex)
+                    if vertex_index < next_vertex
+                    else (next_vertex, vertex_index)
+                )
+                for adjacent_face in faces_by_edge[edge]:
+                    if adjacent_face not in preserved_faces:
+                        preserved_faces.add(adjacent_face)
+                        pending_faces.append(adjacent_face)
+
         edge_midpoints: dict[tuple[int, int], int] = {}
         subdivided_faces: list[tuple[int, ...]] = []
         smooth_flags: list[bool] = []
@@ -75,14 +110,14 @@ def subdivide_faces_to_quads(obj: "bpy.types.Object", level: int) -> None:
             edge_midpoints[key] = index
             return index
 
-        for polygon in mesh.polygons:
-            vertices = list(polygon.vertices)
+        for face_index, polygon in enumerate(mesh.polygons):
+            vertices = polygon_vertices[face_index]
             if len(vertices) < 3:
                 raise RuntimeError(
                     f"cannot subdivide face with {len(vertices)} vertices"
                 )
-            if len(vertices) == 3:
-                subdivided_faces.append(tuple(vertices))
+            if face_index in preserved_faces:
+                subdivided_faces.append(vertices)
                 smooth_flags.append(polygon.use_smooth)
                 continue
 
@@ -127,6 +162,9 @@ def subdivide_faces_to_quads(obj: "bpy.types.Object", level: int) -> None:
 def merge_by_distance(obj: "bpy.types.Object", bbox_diagonal: float, relative_tolerance: float) -> int:
     """Remove near-duplicate vertices within a scale-relative tolerance.
 
+    Call this before index-based topology operations so coincident vertices
+    from separate faces share the same generated edge topology.
+
     Returns the number of vertices removed.
     """
 
@@ -135,13 +173,26 @@ def merge_by_distance(obj: "bpy.types.Object", bbox_diagonal: float, relative_to
     distance = max(bbox_diagonal * relative_tolerance, MERGE_DISTANCE_ABSOLUTE_FLOOR)
     mesh = obj.data
     bm = bmesh.new()
-    bm.from_mesh(mesh)
-    before = len(bm.verts)
-    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=distance)
-    after = len(bm.verts)
-    bm.to_mesh(mesh)
-    bm.free()
-    mesh.update()
+    try:
+        bm.from_mesh(mesh)
+        before = len(bm.verts)
+        bmesh.ops.remove_doubles(bm, verts=list(bm.verts), dist=distance)
+        after = len(bm.verts)
+
+        remaining = bmesh.ops.find_doubles(
+            bm,
+            verts=list(bm.verts),
+            dist=distance,
+        )
+        if remaining["targetmap"]:
+            raise RuntimeError(
+                f"failed to merge {len(remaining['targetmap'])} near-duplicate vertices"
+            )
+
+        bm.to_mesh(mesh)
+    finally:
+        bm.free()
+    mesh.update(calc_edges=True)
     return before - after
 
 

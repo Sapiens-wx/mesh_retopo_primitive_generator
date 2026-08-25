@@ -240,6 +240,9 @@ def generate_sample(
 
             obj, creation_params = primitives.create_primitive(primitive, rng, config.primitive_bounds)
 
+            source_diagonal = variations.bbox_diagonal(obj)
+            quadify.merge_by_distance(obj, source_diagonal, MERGE_DISTANCE_RELATIVE)
+
             requested_level = rng.randint(config.subdivision_min, config.subdivision_max)
             subdivision_level = quadify.resolve_subdivision_level(obj, requested_level)
             quadify.subdivide_faces_to_quads(obj, subdivision_level)
