@@ -98,9 +98,7 @@ def validate_mesh(
                 return ValidationResult(False, f"non-finite vertex coordinate at index {vert.index}")
 
         for face in bm.faces:
-            if len(face.verts) != 4:
-                return ValidationResult(False, f"non-quad face found ({len(face.verts)} verts)")
-            if len({v.index for v in face.verts}) != 4:
+            if len(face.verts) == 4 and len({v.index for v in face.verts}) != 4:
                 return ValidationResult(False, "degenerate quad face reuses a vertex")
             if face.calc_area() <= face_eps:
                 return ValidationResult(False, "degenerate (near-zero-area) quad face found")

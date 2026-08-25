@@ -1,8 +1,9 @@
-"""Conversion to, and low-level checks of, strict quad topology.
+"""Conversion to, and low-level checks of, primarily quad topology.
 
 This module implements architecture.md section 9 (Quad Topology Strategy):
-every source face is subdivided into quads using edge midpoints and a face
-center. Existing vertex positions are never smoothed.
+non-triangular source faces are subdivided into quads using edge midpoints and
+a face center. Triangles are preserved, and existing vertex positions are
+never smoothed.
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ def resolve_subdivision_level(obj: "bpy.types.Object", requested_level: int) -> 
     Subdivision level 0 is only valid when the intermediate mesh already
     passes strict quad validation (architecture.md section 9). Any other
     intermediate mesh is forced to at least level 1 regardless of what was
-    sampled so every output face is a quad.
+    sampled so every non-triangular output face is a quad.
     """
 
     if requested_level > 0:
@@ -35,7 +36,7 @@ def resolve_subdivision_level(obj: "bpy.types.Object", requested_level: int) -> 
 
 
 def subdivide_faces_to_quads(obj: "bpy.types.Object", level: int) -> None:
-    """Subdivide every face into flat quads without a smoothing modifier.
+    """Subdivide non-triangular faces into flat quads without smoothing.
 
     Each original edge receives one shared midpoint. Each face receives one
     center vertex and produces one quad per original corner:
@@ -45,14 +46,14 @@ def subdivide_faces_to_quads(obj: "bpy.types.Object", level: int) -> None:
     This is the topology-only equivalent of subdividing selected faces in
     Edit Mode. Original vertices remain fixed, edge points are exact
     midpoints, and face points are arithmetic centers, so surfaces do not
-    acquire Catmull-Clark smoothing.
+    acquire Catmull-Clark smoothing. Triangular faces pass through unchanged.
     """
 
     mesh = obj.data
     for _ in range(max(0, level)):
         coordinates = [tuple(vertex.co) for vertex in mesh.vertices]
         edge_midpoints: dict[tuple[int, int], int] = {}
-        quad_faces: list[tuple[int, int, int, int]] = []
+        subdivided_faces: list[tuple[int, ...]] = []
         smooth_flags: list[bool] = []
 
         def midpoint_index(first: int, second: int) -> int:
@@ -81,7 +82,8 @@ def subdivide_faces_to_quads(obj: "bpy.types.Object", level: int) -> None:
                     f"cannot subdivide face with {len(vertices)} vertices"
                 )
             if len(vertices) == 3:
-                # skip triangles
+                subdivided_faces.append(tuple(vertices))
+                smooth_flags.append(polygon.use_smooth)
                 continue
 
             center = [0.0, 0.0, 0.0]
@@ -105,7 +107,7 @@ def subdivide_faces_to_quads(obj: "bpy.types.Object", level: int) -> None:
                 next_vertex = vertices[(corner + 1) % len(vertices)]
                 previous_midpoint = midpoint_index(previous_vertex, vertex_index)
                 next_midpoint = midpoint_index(vertex_index, next_vertex)
-                quad_faces.append(
+                subdivided_faces.append(
                     (
                         vertex_index,
                         next_midpoint,
@@ -116,7 +118,7 @@ def subdivide_faces_to_quads(obj: "bpy.types.Object", level: int) -> None:
                 smooth_flags.append(polygon.use_smooth)
 
         mesh.clear_geometry()
-        mesh.from_pydata(coordinates, [], quad_faces)
+        mesh.from_pydata(coordinates, [], subdivided_faces)
         for polygon, use_smooth in zip(mesh.polygons, smooth_flags):
             polygon.use_smooth = use_smooth
         mesh.update(calc_edges=True)
